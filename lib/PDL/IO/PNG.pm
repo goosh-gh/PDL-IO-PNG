@@ -73,11 +73,11 @@ C<[H, W, 3]>. Use C<$img-E<gt>dim(0)> for H, C<$img-E<gt>dim(1)> for W.
 
 =head2 Comparison with alternatives
 
-    Module              Speed (1000×1000 RGB)   Dependencies
-    PDL::IO::PNG        ~0.1-0.15 ms  ← this    libpng only
-    PDL::IO::Image      ~0.2 ms                 Alien::FreeImage (heavy)
-    PDL::IO::GD         ~0.5 ms                 GD library
-    PDL::IO::Pic/rpic   ~5.7 ms                 netpbm
+    Module                          Speed (1000x1000 RGB)    Dependencies
+    PDL::IO::PNG                    ~2.5 ms  <- this         libpng only
+    PDL::IO::Image (FreeImage)      ~5.3 ms  (2.1x slower)  Alien::FreeImage (heavy)
+    PDL::IO::Pic (rpic)             ~18.9 ms (7.5x slower)  netpbm
+    Image::PNG::Libpng + PDL        ~93 ms   (37x slower)   no native PDL integration
 
 =head1 FUNCTIONS
 
