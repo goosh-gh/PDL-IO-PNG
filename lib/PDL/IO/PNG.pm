@@ -7,7 +7,7 @@ use Exporter 'import';
 
 our $VERSION   = '0.01';
 our @EXPORT    = ();
-our @EXPORT_OK = qw(rpng wpng);
+our @EXPORT_OK = qw(rpng wpng rpnga);
 
 # Load the XS compiled code
 require XSLoader;
@@ -108,6 +108,14 @@ Dies on error.
     # Homebrew
     brew install libpng
     perl Makefile.PL && make && make test && make install
+
+=head2 rpnga
+
+    my $img = rpnga($filename);
+
+Read a PNG file and return a C<[H, W, 4]> float32 PDL ndarray (RGBA).
+dim(2)=0:R, 1:G, 2:B, 3:A. Useful when the image encodes information
+in the alpha channel (e.g. transparent drawings where RGB=0,0,0 throughout).
 
 =head1 SEE ALSO
 

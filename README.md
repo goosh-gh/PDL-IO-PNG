@@ -6,21 +6,52 @@ Fast PNG image I/O for PDL via libpng — no FreeImage, no GD, no netpbm.
 
 ```perl
 use PDL;
-use PDL::IO::PNG qw(rpng wpng);
+use PDL::IO::PNG qw(rpng wpng rpnga);
 
 # Read PNG → [H, W, 3] float32 ndarray, row=0 at top (upper-origin)
 my $img = rpng('photo.png');
-printf "dims: %s\n", join('x', $img->dims);  # e.g. 480x640x3
+printf "dims: %s\n", join('x', $img->dims);  # e.g. 3x632x374 (internal [C,W,H])
 
 # Write [H, W, 3] float32 ndarray → PNG
 wpng($img, 'output.png');
+
+# Read RGBA PNG → [H, W, 4] float32 (keeps alpha channel)
+my $rgba = rpnga('drawing.png');
+my $alpha = $rgba->slice("(3),:,:");   # alpha channel [W, H]
+my $mask  = ($alpha > 0.5)->byte;      # binary mask from alpha
 ```
+
+## Functions
+
+### rpng
+
+Read a PNG file → `[C=3, W, H]` float32 ndarray, values 0.0–1.0, row=0 at top.
+All input formats (grey, palette, RGB, RGBA) are normalised to RGB.
+
+### rpnga
+
+Read a PNG file → `[C=4, W, H]` float32 ndarray, **preserving the alpha channel**.
+Useful when the image encodes shape information in alpha rather than RGB
+(common with macOS drawings where RGB=0,0,0 throughout and only alpha varies).
+
+```perl
+my $img  = rpnga('mask.png');
+my $alpha = $img->slice("(3),:,:");   # [W, H]
+my $fg    = ($alpha > 0.5)->byte;     # foreground mask
+```
+
+> **Tip**: If `rpng` returns all zeros, check with `sips -g all file.png`.
+> `hasAlpha: yes` with RGB=0 means shape data is in the alpha channel — use `rpnga`.
+
+### wpng
+
+Write `[C=3, W, H]` float32 PDL ndarray to a PNG file. Values are clamped to 0.0–1.0.
 
 ## Features
 
 - **Zero-copy read**: `png_read_image()` writes directly into the PDL data buffer
-- **Output format**: `[H, W, 3]` float32, values 0.0–1.0, row=0 at top (upper-origin)
-- **Input formats**: grey (1/2/4/8-bit), palette, RGB, RGBA — all normalised to RGB float32
+- **Output format**: `[C, W, H]` float32, values 0.0–1.0, row=0 at top (upper-origin)
+- **Input formats**: grey (1/2/4/8-bit), palette, RGB, RGBA
 - **Single dependency**: only `libpng`
 
 ## Benchmark (1000×1000 RGB PNG, Apple Silicon M-series)
@@ -50,17 +81,17 @@ perl Makefile.PL && make && make test && make install
 
 ## Axis convention
 
-PDL stores arrays in column-major order, so the ndarray returned by `rpng()`
-has internal dims `[3, W, H]`. In user-facing (row-major) terms this is `[H, W, 3]`:
+PDL stores arrays in column-major order. `rpng()` returns internal dims `[3, W, H]`,
+which in user-facing (row-major) terms is `[H, W, 3]`:
 
 ```perl
-my $H = $img->dim(0);   # height
+my $H = $img->dim(0);   # height (but internally dim(2))
 my $W = $img->dim(1);   # width
-# $img->at(h, w, c)     # pixel access
+# $img->at(c, w, h)     # internal access
 ```
 
-Row=0 is at the **top** of the image (upper-origin, PNG standard), so `imshow()`
-in PDL::Graphics::Cairo works correctly with the default `origin => 'upper'`.
+Row=0 is at the **top** of the image (upper-origin, PNG standard), compatible with
+`PDL::Graphics::Cairo`'s `imshow()` default `origin => 'upper'`.
 
 ## Scope
 

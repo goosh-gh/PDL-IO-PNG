@@ -1,2 +1,15 @@
 how2.txt
 download/
+.DS_Store
+MYMETA.json
+MYMETA.yml
+Makefile
+PNG.bs
+PNG.c
+PNG.o
+pdl_png.o
+pm_to_blib
+PDL-IO-PNG.zip
+README.md.202605301535
+PDL-IO-PNG/
+blib/

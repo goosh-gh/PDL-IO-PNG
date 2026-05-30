@@ -11,6 +11,7 @@ static Core *PDL = NULL;
 /* Forward declarations - PDL core passed as parameter */
 SV   *pdl_rpng(char *filename, Core *PDL_core);
 void  pdl_wpng(pdl *p, char *filename, Core *PDL_core);
+SV   *pdl_rpnga(char *filename, Core *PDL_core);
 
 MODULE = PDL::IO::PNG   PACKAGE = PDL::IO::PNG
 
@@ -51,3 +52,11 @@ wpng(pdl_sv, filename)
     p = PDL->SvPDLV(pdl_sv);
     if (!p) croak("wpng: failed to get PDL from argument");
     pdl_wpng(p, filename, PDL);
+
+SV *
+rpnga(filename)
+    char *filename
+  CODE:
+    RETVAL = pdl_rpnga(filename, PDL);
+  OUTPUT:
+    RETVAL

@@ -224,3 +224,111 @@ void pdl_wpng(pdl *p, char *filename, Core *PDL) {
     /* pf が p と別物なら解放 */
     if (pf != p) PDL->destroy(pf);
 }
+
+/* ------------------------------------------------------------------ */
+/* rpnga - RGBA版: [C=4, W, H] float32 を返す                         */
+/*   dim0=0:R, 1:G, 2:B, 3:A  (アルファを捨てない)                    */
+/* ------------------------------------------------------------------ */
+SV *pdl_rpnga(char *filename, Core *PDL) {
+    FILE        *fp   = NULL;
+    png_structp  png  = NULL;
+    png_infop    info = NULL;
+    png_bytep   *rows = NULL;
+    pdl         *pu   = NULL;
+    pdl         *pf   = NULL;
+    PngErrCtx    ctx;
+
+    fp = fopen(filename, "rb");
+    if (!fp) croak("rpnga: cannot open '%s': %s", filename, strerror(errno));
+
+    png = png_create_read_struct(PNG_LIBPNG_VER_STRING, &ctx,
+                                 png_error_fn, png_warn_fn);
+    if (!png) { fclose(fp); croak("rpnga: png_create_read_struct failed"); }
+
+    info = png_create_info_struct(png);
+    if (!info) {
+        png_destroy_read_struct(&png, NULL, NULL);
+        fclose(fp);
+        croak("rpnga: png_create_info_struct failed");
+    }
+
+    if (setjmp(ctx.jmpbuf)) {
+        png_destroy_read_struct(&png, &info, NULL);
+        if (rows) free(rows);
+        if (pu)   PDL->destroy(pu);
+        fclose(fp);
+        croak("rpnga: libpng error: %s", ctx.msg);
+    }
+
+    png_init_io(png, fp);
+    png_read_info(png, info);
+
+    int W          = (int)png_get_image_width(png, info);
+    int H          = (int)png_get_image_height(png, info);
+    int color_type = png_get_color_type(png, info);
+    int bit_depth  = png_get_bit_depth(png, info);
+
+    /* Normalize to 8-bit RGBA */
+    if (color_type == PNG_COLOR_TYPE_PALETTE)
+        png_set_palette_to_rgb(png);
+    if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8)
+        png_set_expand_gray_1_2_4_to_8(png);
+    if (png_get_valid(png, info, PNG_INFO_tRNS))
+        png_set_tRNS_to_alpha(png);
+    if (bit_depth == 16)
+        png_set_strip_16(png);
+    /* アルファがなければ追加 */
+    if (!(color_type & PNG_COLOR_MASK_ALPHA))
+        png_set_add_alpha(png, 255, PNG_FILLER_AFTER);
+    /* グレーをRGBに */
+    if (color_type == PNG_COLOR_TYPE_GRAY ||
+        color_type == PNG_COLOR_TYPE_GRAY_ALPHA)
+        png_set_gray_to_rgb(png);
+
+    png_read_update_info(png, info);
+
+    /* Allocate uint8 PDL [C=4, W, H] */
+    PDL_Indx udims[3] = {4, W, H};
+    pu = PDL->pdlnew();
+    if (!pu) { png_destroy_read_struct(&png,&info,NULL); fclose(fp);
+               croak("rpnga: pdlnew failed"); }
+    PDL->setdims(pu, udims, 3);
+    pu->datatype = PDL_B;
+    PDL->allocdata(pu);
+
+    unsigned char *ubuf = (unsigned char *)pu->data;
+    if (!ubuf) { PDL->destroy(pu); png_destroy_read_struct(&png,&info,NULL);
+                 fclose(fp); croak("rpnga: allocdata returned NULL"); }
+
+    rows = (png_bytep *)malloc(H * sizeof(png_bytep));
+    if (!rows) { PDL->destroy(pu); png_destroy_read_struct(&png,&info,NULL);
+                 fclose(fp); croak("rpnga: out of memory"); }
+
+    for (int y = 0; y < H; y++)
+        rows[y] = ubuf + (size_t)y * W * 4;
+
+    png_read_image(png, rows);
+    free(rows); rows = NULL;
+    png_destroy_read_struct(&png, &info, NULL);
+    fclose(fp);
+
+    /* float32変換 */
+    PDL_Indx fdims[3] = {4, W, H};
+    pf = PDL->pdlnew();
+    if (!pf) { PDL->destroy(pu); croak("rpnga: pdlnew (float) failed"); }
+    PDL->setdims(pf, fdims, 3);
+    pf->datatype = PDL_F;
+    PDL->allocdata(pf);
+
+    float *fbuf = (float *)pf->data;
+    int n = H * W * 4;
+    for (int i = 0; i < n; i++)
+        fbuf[i] = ubuf[i] * (1.0f / 255.0f);
+
+    PDL->destroy(pu);
+
+    SV *ret = sv_newmortal();
+    PDL->SetSV_PDL(ret, pf);
+    SvREFCNT_inc(ret);
+    return ret;
+}
