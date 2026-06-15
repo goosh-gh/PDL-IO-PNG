@@ -47,6 +47,11 @@ my $fg    = ($alpha > 0.5)->byte;     # foreground mask
 
 Write `[C=3, W, H]` float32 PDL ndarray to a PNG file. Values are clamped to 0.0–1.0.
 
+As of v0.03, `wpng` uses **zlib compression level 1** (`PNG_FILTER_NONE`) instead of
+the libpng default (level 6). This reduces write time from ~40 ms to ~5 ms on a
+1100×900 image with no visible quality difference for scientific plots. File size
+increases by roughly 20–30%.
+
 ## Features
 
 - **Zero-copy read**: `png_read_image()` writes directly into the PDL data buffer
@@ -56,12 +61,21 @@ Write `[C=3, W, H]` float32 PDL ndarray to a PNG file. Values are clamped to 0.0
 
 ## Benchmark (1000×1000 RGB PNG, Apple Silicon M-series)
 
+### Read (rpng)
+
 | Module | Speed | Notes |
 |--------|-------|-------|
 | **PDL::IO::PNG** | **2.5 ms** | libpng direct XS, this module |
 | PDL::IO::Image | 5.3 ms (2.1× slower) | FreeImage via Alien::FreeImage |
 | PDL::IO::Pic (rpic) | 18.9 ms (7.5× slower) | netpbm |
 | Image::PNG::Libpng + manual PDL | 93.3 ms (37× slower) | no native PDL integration |
+
+### Write (wpng, 1100×900, Apple Silicon M-series)
+
+| Compression level | Speed | File size | Notes |
+|------------------|-------|-----------|-------|
+| 6 (libpng default) | ~40 ms | smaller | previous default |
+| **1 + FILTER_NONE** | **~5 ms** | +20–30% | **current default (v0.03+)** |
 
 ## Installation
 

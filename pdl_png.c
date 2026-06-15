@@ -195,6 +195,8 @@ void pdl_wpng(pdl *p, char *filename, Core *PDL) {
                  PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_DEFAULT,
                  PNG_FILTER_TYPE_DEFAULT);
+    png_set_compression_level(png, 1);
+    png_set_filter(png, 0, PNG_FILTER_NONE);
     png_write_info(png, info);
 
     buf = (unsigned char *)malloc((size_t)n);
