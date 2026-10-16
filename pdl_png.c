@@ -334,3 +334,111 @@ SV *pdl_rpnga(char *filename, Core *PDL) {
     SvREFCNT_inc(ret);
     return ret;
 }
+
+/* ------------------------------------------------------------------ */
+/* png_encode - byte [C, W, H] (C = 3 or 4) -> PNG bytes in a Perl SV */
+/*   bgr   : input order is B,G,R(,A)  (png_set_bgr)                  */
+/*   alpha : for C=4, 1 = write RGBA, 0 = drop 4th byte, write RGB    */
+/*   level : zlib compression level 0..9                              */
+/* ------------------------------------------------------------------ */
+typedef struct {
+    SV *out;
+} PngMemDst;
+
+static void png_mem_write_fn(png_structp png, png_bytep data, png_size_t len) {
+    PngMemDst *dst = (PngMemDst *)png_get_io_ptr(png);
+    dTHX;
+    sv_catpvn(dst->out, (const char *)data, (STRLEN)len);
+}
+
+static void png_mem_flush_fn(png_structp png) {
+    (void)png;
+}
+
+SV *pdl_png_encode(pdl *p, int bgr, int alpha, int level, Core *PDL) {
+    png_structp  png  = NULL;
+    png_infop    info = NULL;
+    png_bytep   *rows = NULL;
+    SV          *out  = NULL;
+    PngErrCtx    ctx;
+    PngMemDst    dst;
+
+    if (!p) croak("png_encode: NULL pdl pointer");
+    if (p->datatype != PDL_B)
+        croak("png_encode: input must be of type byte");
+    if (p->ndims != 3)
+        croak("png_encode: input must have 3 dims (C, W, H), got %d",
+              (int)p->ndims);
+
+    int C = (int)p->dims[0];
+    int W = (int)p->dims[1];
+    int H = (int)p->dims[2];
+    if (C != 3 && C != 4)
+        croak("png_encode: dim(0) must be 3 or 4 (C), got %d", C);
+    if (W < 1 || H < 1)
+        croak("png_encode: image must be at least 1x1, got %dx%d", W, H);
+    if (level < 0 || level > 9)
+        croak("png_encode: level must be 0..9, got %d", level);
+    if (alpha && C != 4)
+        croak("png_encode: alpha => 1 needs 4 channels, got %d", C);
+
+    /* slices etc. -> contiguous data */
+    PDL->make_physical(p);
+    if (!p->data) croak("png_encode: no data after make_physical");
+    unsigned char *src = (unsigned char *)p->data;
+
+    size_t rowbytes = (size_t)W * C;
+    rows = (png_bytep *)malloc((size_t)H * sizeof(png_bytep));
+    if (!rows) croak("png_encode: out of memory for rows");
+    for (int y = 0; y < H; y++)
+        rows[y] = src + (size_t)y * rowbytes;
+
+    out = newSVpvn("", 0);
+    SvGROW(out, rowbytes * H / 4 + 4096);
+    dst.out = out;
+
+    png = png_create_write_struct(PNG_LIBPNG_VER_STRING, &ctx,
+                                  png_error_fn, png_warn_fn);
+    if (!png) {
+        free(rows); SvREFCNT_dec(out);
+        croak("png_encode: png_create_write_struct failed");
+    }
+    info = png_create_info_struct(png);
+    if (!info) {
+        png_destroy_write_struct(&png, NULL);
+        free(rows); SvREFCNT_dec(out);
+        croak("png_encode: png_create_info_struct failed");
+    }
+
+    if (setjmp(ctx.jmpbuf)) {
+        png_destroy_write_struct(&png, &info);
+        free(rows);
+        SvREFCNT_dec(out);
+        croak("png_encode: libpng error: %s", ctx.msg);
+    }
+
+    png_set_write_fn(png, &dst, png_mem_write_fn, png_mem_flush_fn);
+    png_set_IHDR(png, info, (png_uint_32)W, (png_uint_32)H, 8,
+                 (C == 4 && alpha) ? PNG_COLOR_TYPE_RGB_ALPHA
+                                   : PNG_COLOR_TYPE_RGB,
+                 PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_DEFAULT,
+                 PNG_FILTER_TYPE_DEFAULT);
+    png_set_compression_level(png, level);
+    png_set_filter(png, 0, PNG_FILTER_NONE);
+    png_write_info(png, info);
+
+    /* transforms: set after png_write_info (filler uses the IHDR color type) */
+    if (bgr)
+        png_set_bgr(png);
+    if (C == 4 && !alpha)
+        png_set_filler(png, 0, PNG_FILLER_AFTER);
+
+    /* libpng copies each row before transforming; input is not modified */
+    png_write_image(png, rows);
+    png_write_end(png, NULL);
+
+    png_destroy_write_struct(&png, &info);
+    free(rows);
+    return out;
+}

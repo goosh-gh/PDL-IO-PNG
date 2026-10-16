@@ -6,7 +6,7 @@ Fast PNG image I/O for PDL via libpng — no FreeImage, no GD, no netpbm.
 
 ```perl
 use PDL;
-use PDL::IO::PNG qw(rpng wpng rpnga);
+use PDL::IO::PNG qw(rpng wpng rpnga png_encode);
 
 # Read PNG → [H, W, 3] float32 ndarray, row=0 at top (upper-origin)
 my $img = rpng('photo.png');
@@ -51,6 +51,35 @@ As of v0.03, `wpng` uses **zlib compression level 1** (`PNG_FILTER_NONE`) instea
 the libpng default (level 6). This reduces write time from ~40 ms to ~5 ms on a
 1100×900 image with no visible quality difference for scientific plots. File size
 increases by roughly 20–30%.
+
+### png_encode
+
+Encode a byte ndarray `[C, W, H]` (C = 3 or 4, row 0 at the top) to PNG and
+return the file contents as a Perl scalar. No temporary file is used.
+
+```perl
+my $png = png_encode($bytes);                                  # RGB or RGBA
+my $png = png_encode($bgra, bgr => 1, alpha => 0, level => 1); # Cairo argb32
+```
+
+| Option | Meaning | Default |
+|--------|---------|---------|
+| `bgr => 1` | input order is B, G, R(, A) (Cairo `argb32` memory layout on little-endian) | 0 |
+| `alpha => 0` | 4-channel input: drop the 4th byte and write RGB | 1 for 4 channels |
+| `level => 0..9` | zlib compression level (filter type None) | 1 |
+
+Channel values are written as they are (Cairo's premultiplied values are the
+same as unpremultiplied ones when the surface is fully opaque).
+
+Encoding a 1100×850 Cairo `argb32` surface (19 waveform panels) to an RGB
+PNG (median of 40, including copying the surface into a byte ndarray, which
+takes 0.06 ms on macOS and 2.9 ms on Linux):
+
+| Path | macOS arm64 (Apple M5 Pro), perl 5.40, PDL 2.104 | Linux x86_64, perl 5.38, PDL 2.085, libpng 1.6.43 |
+|------|------|------|
+| `->slice('2:0:-1')->float / 255`, `wpng` to a temp file, read back | 7.8 ms | 58.9 ms |
+| `png_encode($p, bgr => 1, alpha => 0)` (level 1) | 4.0 ms | 7.9 ms |
+| `png_encode($p, bgr => 1, alpha => 0, level => 0)` | 1.9 ms | 4.2 ms |
 
 ## Features
 

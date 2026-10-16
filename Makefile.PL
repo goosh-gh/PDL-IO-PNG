@@ -52,6 +52,7 @@ WriteMakefile(
         'PDL'  => '2.0',
     },
     TEST_REQUIRES => {
-        'Test::More' => '0',
+        'Test::More'     => '0',
+        'Compress::Zlib' => '0',
     },
 );

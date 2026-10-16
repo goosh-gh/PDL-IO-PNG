@@ -12,6 +12,7 @@ static Core *PDL = NULL;
 SV   *pdl_rpng(char *filename, Core *PDL_core);
 void  pdl_wpng(pdl *p, char *filename, Core *PDL_core);
 SV   *pdl_rpnga(char *filename, Core *PDL_core);
+SV   *pdl_png_encode(pdl *p, int bgr, int alpha, int level, Core *PDL_core);
 
 MODULE = PDL::IO::PNG   PACKAGE = PDL::IO::PNG
 
@@ -58,5 +59,20 @@ rpnga(filename)
     char *filename
   CODE:
     RETVAL = pdl_rpnga(filename, PDL);
+  OUTPUT:
+    RETVAL
+
+SV *
+_png_encode(pdl_sv, bgr, alpha, level)
+    SV  *pdl_sv
+    int  bgr
+    int  alpha
+    int  level
+  PREINIT:
+    pdl *p;
+  CODE:
+    p = PDL->SvPDLV(pdl_sv);
+    if (!p) croak("png_encode: failed to get PDL from argument");
+    RETVAL = pdl_png_encode(p, bgr, alpha, level, PDL);
   OUTPUT:
     RETVAL
