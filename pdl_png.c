@@ -200,7 +200,11 @@ void pdl_wpng(pdl *p, char *filename, Core *PDL) {
     png_write_info(png, info);
 
     buf = (unsigned char *)malloc((size_t)n);
-    if (!buf) croak("wpng: out of memory");
+    if (!buf) {
+        png_destroy_write_struct(&png, &info);
+        fclose(fp);
+        croak("wpng: out of memory");
+    }
 
     float *src = (float *)pf->data;
     for (int i = 0; i < n; i++) {
@@ -211,7 +215,12 @@ void pdl_wpng(pdl *p, char *filename, Core *PDL) {
     }
 
     rows = (png_bytep *)malloc(H * sizeof(png_bytep));
-    if (!rows) { free(buf); croak("wpng: out of memory for rows"); }
+    if (!rows) {
+        free(buf);
+        png_destroy_write_struct(&png, &info);
+        fclose(fp);
+        croak("wpng: out of memory for rows");
+    }
     for (int y = 0; y < H; y++)
         rows[y] = buf + (size_t)y * W * 3;
 
