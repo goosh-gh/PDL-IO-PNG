@@ -119,7 +119,15 @@ subtest 'alpha => 0 drops the 4th byte' => sub {
     is_deeply([$d->dims], [3, $W, $H], 'decoded dims [3,W,H]');
     is((($d->long - $rgba->slice('0:2')->long)->abs->max)->sclr, 0,
        'RGB equal to first three channels');
-    ok(length($png) < length(png_encode($rgba)), 'RGB smaller than RGBA');
+    # the image data before compression: one filter byte and 3 (not 4) bytes per pixel a row.
+    # (The compressed sizes depend on the content: this fixture is periodic in 4 channels and
+    # its RGBA stream deflates smaller than the RGB one, 1960 against 2520 bytes.)
+    my $idat = sub { my ($p) = @_; my ($pos, $d) = (8, '');
+        while ($pos < length $p) { my ($l, $t) = unpack('N a4', substr($p, $pos, 8));
+            $d .= substr($p, $pos + 8, $l) if $t eq 'IDAT'; $pos += 12 + $l }
+        length Compress::Zlib::uncompress($d) };
+    is($idat->($png), $H * (3 * $W + 1), 'RGB image data: H x (3W + 1) bytes');
+    is($idat->(png_encode($rgba)), $H * (4 * $W + 1), 'RGBA image data: H x (4W + 1) bytes');
 };
 
 subtest 'C = 3 input' => sub {
